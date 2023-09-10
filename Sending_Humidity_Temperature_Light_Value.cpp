@@ -1,12 +1,5 @@
 /*
-  Rui Santos
-  Complete project details at https://RandomNerdTutorials.com/esp8266-nodemcu-mqtt-publish-dht11-dht22-arduino/
-  
-  Permission is hereby granted, free of charge, to any person obtaining a copy
-  of this software and associated documentation files.
-  
-  The above copyright notice and this permission notice shall be included in all
-  copies or substantial portions of the Software.
+      Created by B20DCCN728 - NGUYEN HOANG VIET
 */
 
 #include <Arduino.h>
@@ -15,20 +8,23 @@
 #include <Ticker.h>
 #include <AsyncMqttClient.h>
 
-#define WIFI_SSID "Hoang Viet"
-#define WIFI_PASSWORD "88888888"
+#define WIFI_SSID "Cảnh all in Sin88"
+#define WIFI_PASSWORD "5032003@"
 
-// Raspberri Pi Mosquitto MQTT Broker
-#define MQTT_HOST IPAddress(192, 168, 1, 6)
+//ESP8266, Raspberri Pi Mosquitto MQTT Broker
+//192.168.16.104
+#define MQTT_HOST IPAddress(192, 168, 16, 104)
 // For a cloud MQTT broker, type the domain name
 //#define MQTT_HOST "example.com"
 #define MQTT_PORT 4000
 
 // Temperature MQTT Topics
-#define MQTT_PUB_TEMP "esp/dht/temperature"
-#define MQTT_PUB_HUM "esp/dht/humidity"
-#define MQTT_PUB_LIG "esp/lm393/lightvalue"
-#define MQTT_PUB_VOL "esp/lm393/voltage"
+#define MQTT_PUB_TEMP "tro/esp/dht/temperature"
+#define MQTT_PUB_HUM "tro/esp/dht/humidity"
+#define MQTT_PUB_LIG "tro/esp/lm393/lightvalue"
+#define MQTT_PUB_VOL "tro/esp/lm393/voltage"
+#define MQTT_SUB_LED_1 "tro/esp/led/led_1"
+#define MQTT_SUB_LED_2 "tro/esp/led/led_2"
 
 // Digital pin connected to the DHT sensor
 #define DHTPIN 2  
@@ -43,12 +39,16 @@ DHT dht(DHTPIN, DHTTYPE);
 
 //Sensor Pin for Light Sensor
 const int sensorPin = A0; 
+const int LED_PIN_1 = D1;
+const int LED_PIN_2 = D2;
 
 // Variables to hold sensor readings
 float temp;
 float hum;
 int lightValue;
 float voltage;
+float led_1;
+float led_2;
 
 AsyncMqttClient mqttClient;
 Ticker mqttReconnectTimer;
@@ -85,6 +85,10 @@ void onMqttConnect(bool sessionPresent) {
   Serial.println("Connected to MQTT.");
   Serial.print("Session present: ");
   Serial.println(sessionPresent);
+  mqttClient.subscribe(MQTT_SUB_LED_1, 0);
+  Serial.print("Connected to LED 1 topic");
+  mqttClient.subscribe(MQTT_SUB_LED_2, 0);
+  Serial.print("Connected to LED 2 topic");
 }
 
 void onMqttDisconnect(AsyncMqttClientDisconnectReason reason) {
@@ -95,7 +99,7 @@ void onMqttDisconnect(AsyncMqttClientDisconnectReason reason) {
   }
 }
 
-/*void onMqttSubscribe(uint16_t packetId, uint8_t qos) {
+void onMqttSubscribe(uint16_t packetId, uint8_t qos) {
   Serial.println("Subscribe acknowledged.");
   Serial.print("  packetId: ");
   Serial.println(packetId);
@@ -107,7 +111,7 @@ void onMqttUnsubscribe(uint16_t packetId) {
   Serial.println("Unsubscribe acknowledged.");
   Serial.print("  packetId: ");
   Serial.println(packetId);
-}*/
+}
 
 void onMqttPublish(uint16_t packetId) {
   Serial.print("Publish acknowledged.");
@@ -115,24 +119,80 @@ void onMqttPublish(uint16_t packetId) {
   Serial.println(packetId);
 }
 
+//Receiving Messages 
+void onMqttMessage(char* topic, char* payload, AsyncMqttClientMessageProperties properties, size_t len, size_t index, size_t total) {
+  //Read messages from MQTT 
+  //Repaire Null-terminator
+  payload[len] = '\0';
+
+  //Convert to String
+  String message = String(payload);
+  String topic_string = String(topic);
+
+  Serial.println("Received message on topic " + String(topic) + ": " + message);
+
+  //Data processing -> LED 1
+  if (strcmp(topic, MQTT_SUB_LED_1) == 0) {
+
+    Serial.println("Topic: " + topic_string + " have message: " + message + "");
+
+    if (message == "ON") 
+
+      digitalWrite(LED_PIN_1, HIGH);
+
+    else if (message == "OFF") 
+
+      digitalWrite(LED_PIN_1, LOW);
+
+    else 
+
+      Serial.println("Wrong syntax!!");
+  //Data processing -> LED 2
+  } else if (strcmp(topic, MQTT_SUB_LED_2) == 0) {
+
+    Serial.println("Topic: " + topic_string + " have message: " + message + "");
+
+    if (message == "ON") 
+
+      digitalWrite(LED_PIN_2, HIGH);
+
+    else if (message == "OFF") 
+
+      digitalWrite(LED_PIN_2, LOW);
+
+    else 
+
+      Serial.println("Wrong syntax!!");
+
+  } else {
+
+    Serial.println("Not received data from MQTT broker, right now!!!");
+
+  }
+}
+
 void setup() {
   Serial.begin(115200);
   Serial.println();
+
+  pinMode(LED_PIN_1, OUTPUT);
+  pinMode(LED_PIN_2, OUTPUT);
 
   dht.begin();
   
   wifiConnectHandler = WiFi.onStationModeGotIP(onWifiConnect);
   wifiDisconnectHandler = WiFi.onStationModeDisconnected(onWifiDisconnect);
-
+  
   mqttClient.onConnect(onMqttConnect);
   mqttClient.onDisconnect(onMqttDisconnect);
-  //mqttClient.onSubscribe(onMqttSubscribe);
-  //mqttClient.onUnsubscribe(onMqttUnsubscribe);
+  mqttClient.onSubscribe(onMqttSubscribe);
+  mqttClient.onUnsubscribe(onMqttUnsubscribe);
   mqttClient.onPublish(onMqttPublish);
   mqttClient.setServer(MQTT_HOST, MQTT_PORT);
   // If your broker requires authentication (username and password), set them below
   //mqttClient.setCredentials("REPlACE_WITH_YOUR_USER", "REPLACE_WITH_YOUR_PASSWORD");
-  
+  mqttClient.onMessage(onMqttMessage);
+
   connectToWifi();
 }
 
@@ -161,12 +221,12 @@ void loop() {
     Serial.printf("Message: %.2f \n", hum);
     delay(2000);
 
-    //Read light value as Lux
+    //Read light value as Luxz
     lightValue = analogRead(sensorPin);  
     //Read voltage as Vol
     voltage = lightValue * (3.3 / 1023);  
     // Publish an MQTT message on topic esp/lm393/lightvalue
-    uint16_t packetIdPub3 = mqttClient.publish(MQTT_PUB_LIG, 1, true, String(lightValue).c_str());                            
+    uint16_t packetIdPub3 = mqttClient.publish(MQTT_PUB_LIG, 1, true, String(lightValue).c_str());                          
     Serial.printf("Publishing on topic %s at QoS 1, packetId: %i ", MQTT_PUB_LIG, packetIdPub3);
     Serial.printf("Message: %d \n", lightValue);    
 
@@ -176,5 +236,6 @@ void loop() {
     Serial.printf("Message: %.2f \n", voltage);    
 
   }
-}
 
+
+}
